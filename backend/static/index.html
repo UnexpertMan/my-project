@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <title>Shogi CPU (Minimal)</title>
+  <style>
+    body { font-family: sans-serif; margin: 24px; }
+    #board { white-space: pre; font-family: ui-monospace, Menlo, Consolas, monospace; }
+    button { margin-right: 8px; }
+    input { width: 120px; }
+  </style>
+</head>
+<body>
+  <h1>Shogi CPU (Minimal)</h1>
+  <div>
+    <button id="newBtn">新規対局</button>
+    USI指し手: <input id="mv" placeholder="7g7f">
+    <button id="moveBtn">指す</button>
+  </div>
+  <pre id="board"></pre>
+  <div id="info"></div>
+
+<script>
+let sfen = null;
+
+function sfenToAscii(sfen) {
+  const part = sfen.split(" ")[0];
+  const rows = part.split("/");
+  const mapPiece = (c) => /[0-9]/.test(c) ? " ".repeat(parseInt(c)) : c;
+  let out = "  ９ ８ ７ ６ ５ ４ ３ ２ １\n";
+  rows.forEach((r, i) => {
+    const line = r.split("").map(mapPiece).join(" ");
+    out += (i+1) + " " + line + "\n";
+  });
+  return out;
+}
+
+
+async function newGame() {
+  try {
+    console.log("POST /new を呼びます…");
+    const res = await fetch("/new", { method: "POST" });
+    console.log("status:", res.status);
+    const data = await res.json();
+    console.log("response:", data);
+    if (!data.sfen) {
+      document.getElementById("info").textContent = "API応答にsfenがありません";
+      return;
+    }
+    sfen = data.sfen;
+    document.getElementById("board").textContent = sfenToAscii(sfen);
+    document.getElementById("info").textContent = "あなたが先手です。USI 例: 7g7f";
+  } catch (e) {
+    console.error("newGame error:", e);
+    document.getElementById("info").textContent = "APIに接続できません";
+  }
+}
+
+
+async function playMove() {
+  const move = document.getElementById("mv").value.trim();
+  if (!sfen || !move) return;
+  const res = await fetch("/move", {
+     method:"POST",
+     headers: {"Content-Type":"application/json"},
+     body: JSON.stringify({ sfen, move_usi: move })
+  });
+  const data = await res.json();
+  if (data.detail) {
+    document.getElementById("info").textContent = "不正手です。もう一度。";
+    return;
+  }
+  sfen = data.sfen;
+  document.getElementById("board").textContent = sfenToAscii(sfen);
+  if (data.cpu_move_usi) {
+    document.getElementById("info").textContent = `CPUの応手: ${data.cpu_move_usi}`;
+  }
+  if (data.game_over) {
+    document.getElementById("info").textContent += " / 終局";
+  }
+}
+
+document.getElementById("newBtn").onclick = newGame;
+document.getElementById("moveBtn").onclick = playMove;
+newGame();
+</script>
+</body>
+</html>
